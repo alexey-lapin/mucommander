@@ -18,8 +18,11 @@
 
 package com.mucommander.commons.file.protocol.sftp;
 
+import java.awt.Component;
 import java.io.IOException;
+import java.util.function.Function;
 
+import com.mucommander.commons.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +35,13 @@ import com.jcraft.jsch.UserInfo;
 import com.mucommander.commons.file.Credentials;
 import com.mucommander.commons.file.FileURL;
 import com.mucommander.commons.file.connection.ConnectionHandler;
+
+import javax.swing.Box;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPasswordField;
+import javax.swing.JTextField;
+import javax.swing.text.JTextComponent;
 
 /**
  * Handles connections to SFTP servers.
@@ -86,7 +96,7 @@ class SFTPConnectionHandler extends ConnectionHandler implements AutoCloseable {
             }
 
             session = jsch.getSession(credentials.getLogin(), realm.getHost(), port);
-            session.setUserInfo(new PasswordAuthentication());
+            session.setUserInfo(StringUtils.isNullOrEmpty(credentials.getPassword()) ? new InteractiveAuthentication() : new PasswordAuthentication());
 
             session.connect(5*1000);
             // Init SFTP connections
@@ -132,6 +142,79 @@ class SFTPConnectionHandler extends ConnectionHandler implements AutoCloseable {
     }
 
 
+    private class InteractiveAuthentication implements UserInfo, UIKeyboardInteractive {
+
+        @Override
+        public void showMessage(String message) {
+        }
+
+        @Override
+        public boolean promptYesNo(String message) {
+            return true;
+        }
+
+        @Override
+        public boolean promptPassword(String message) {
+            return false;
+        }
+
+        @Override
+        public boolean promptPassphrase(String message) {
+            return false;
+        }
+
+        @Override
+        public String getPassword() {
+            return null;
+        }
+
+        @Override
+        public String getPassphrase() {
+            return null;
+        }
+
+        @Override
+        public String[] promptKeyboardInteractive(String destination,
+                                                  String name,
+                                                  String instruction,
+                                                  String[] prompt,
+                                                  boolean[] echo) {
+            String[] result = new String[prompt.length];
+            for (int i=0; i<echo.length; i++)
+                result[i] = echo[i] ? textInput(prompt[i]) : passwordInput(prompt[i]);
+            return result;
+        }
+
+        private String textInput(String prompt) {
+            return input(prompt, new JTextField(), JTextComponent::getText);
+        }
+
+        private String passwordInput(String prompt) {
+            return input(prompt, new JPasswordField(), field -> new String(field.getPassword()));
+        }
+
+        private <T extends JTextField> String input(String prompt, T field, Function<T, String> mapper) {
+            JLabel label = new JLabel(prompt);
+            label.setAlignmentX(Component.LEFT_ALIGNMENT);
+            field.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+            Box box = Box.createVerticalBox();
+            box.add(label);
+            box.add(field);
+
+            int option = JOptionPane.showConfirmDialog(null,
+                    box,
+                    "Input",
+                    JOptionPane.OK_CANCEL_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+
+            if (option == 0) {
+                return mapper.apply(field);
+            }
+            throw new RuntimeException("Input cancelled");
+        }
+    }
+
     @Override
     public void keepAlive() {
         // No-op, keep alive is not available and shouldn't really be necessary, SSH servers such as OpenSSH usually
@@ -143,27 +226,27 @@ class SFTPConnectionHandler extends ConnectionHandler implements AutoCloseable {
     	@Override
 		public void showMessage(String message) {
 		}
-		
+
 		@Override
 		public boolean promptYesNo(String message) {
 			return true;
 		}
-		
+
 		@Override
 		public boolean promptPassword(String message) {
 			return true;
 		}
-		
+
 		@Override
 		public boolean promptPassphrase(String message) {
 			return true;
 		}
-		
+
 		@Override
 		public String getPassword() {
 			return credentials.getPassword();
 		}
-		
+
 		@Override
 		public String getPassphrase() {
 			return credentials.getPassword();
